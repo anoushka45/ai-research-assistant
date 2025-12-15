@@ -17,3 +17,5 @@ it includes implementation of a **LangChain Expression Language (LCEL)** pipelin
 * **Frontend:** `Streamlit`
 * **Data Handling:** `BeautifulSoup`, `requests`, `python-dotenv`
 
+![alt text](screenshots/image1.png) 
+![alt text](screenshots/image2.png)
