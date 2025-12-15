@@ -1,45 +1,73 @@
-# app.py
 import streamlit as st
-from scrape import scrape_text_from_url
-from chain import make_llm, research_summary_from_text
-from utils import clean_user_input
-from dotenv import load_dotenv
-load_dotenv()
+import os
+from research_assistant import scrape_text, research_chain
 
-st.set_page_config(page_title="AI Research Assistant", layout="centered")
+# --- STREAMLIT APP ---
+def main():
+    st.set_page_config(page_title="AI Research Assistant", layout="wide")
+    st.title("💡AI Research Assistant")
+    st.markdown("---")
 
-st.title("AI Research Assistant — Streamlit + LangChain")
-st.write("Enter a URL and a query. The app will scrape the page and summarize findings relevant to your query.")
+    # Sidebar for API Key Management
+    with st.sidebar:
+        st.header("Configuration")
+        
+        # Get the API Key
+        gemini_key = st.text_input(
+            "Gemini API Key", 
+            type="password", 
+            value=os.environ.get("GEMINI_API_KEY", "") # Pre-fill if already in env
+        )
+        
+        if gemini_key:
+            os.environ["GEMINI_API_KEY"] = gemini_key
+            st.success("API Key loaded.")
+        else:
+            st.warning("Please enter your Gemini API Key.")
 
-with st.form("research_form"):
-    url = st.text_input("URL to scrape", placeholder="https://example.com/article")
-    query = st.text_input("Research query (e.g., 'latest trends in AI hardware')", placeholder="What do I need to know?")
-    submit = st.form_submit_button("Run Research")
+    # Main App Interface
+    url = st.text_input(
+        "🔗 Enter a URL to Research:", 
+        value="https://en.wikipedia.org/wiki/Artificial_intelligence"
+    )
+    user_query = st.text_area(
+        "❓ What specific question do you have about this page?", 
+        value="Summarize the history and ethical concerns of AI."
+    )
 
-if submit:
-    url = url.strip()
-    query = clean_user_input(query)
-    if not url:
-        st.error("Please provide a URL to scrape.")
-    elif not query:
-        st.error("Please provide a question or query.")
-    else:
-        st.info("Scraping the page...")
-        try:
-            scraped = scrape_text_from_url(url)
-        except Exception as e:
-            st.error(f"Scraping failed: {e}")
-            scraped = None
+    if st.button("Start Research") and url and user_query:
+        if "GEMINI_API_KEY" not in os.environ or not os.environ["GEMINI_API_KEY"]:
+            st.error("Cannot start. Please provide your Gemini API Key in the sidebar.")
+            return
 
-        if scraped:
-            st.success("Scrape complete. Running LLM...")
-            # instantiate LLM (could cache in production)
-            llm = make_llm()
+        with st.spinner("Step 1: Scraping content..."):
+            
+            # --- SCRAPE STEP (research_assistant.py) ---
+            raw_content = scrape_text(url)
+            
+            if "Error during scraping" in raw_content:
+                st.error(raw_content)
+                return
+
+            st.success(f"✅ Scraped content successfully! (Length: {len(raw_content)} characters)")
+            
+        with st.spinner("Step 2 & 3: AI Analysis via LangChain..."):
+            
+            # --- PROMPT & GENERATE STEP (LangChain Chain) ---
             try:
-                result = research_summary_from_text(llm, query, scraped)
-                st.markdown("### Model Output")
+                # Invoke the LangChain pipeline with the input dictionary
+                result = research_chain.invoke({
+                    "scraped_content": raw_content, 
+                    "user_question": user_query
+                })
+                
+                st.success("Analysis Complete!")
+                st.markdown("---")
+                st.markdown("## 🔍 Research Report")
                 st.write(result)
-                with st.expander("Raw scraped text (truncated)"):
-                    st.write(scraped[:2000] + ("..." if len(scraped) > 2000 else ""))
+                
             except Exception as e:
-                st.error(f"LLM call failed: {e}")
+                st.error(f"An error occurred during AI analysis: {e}")
+                
+if __name__ == "__main__":
+    main()
